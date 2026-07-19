@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS clients (
 -- Create request_logs table for analytics
 CREATE TABLE IF NOT EXISTS request_logs (
     id BIGSERIAL PRIMARY KEY,
-    client_id VARCHAR(255) NOT NULL,
+    client_id VARCHAR(255) NOT NULL, 
     resource VARCHAR(500),
     allowed BOOLEAN NOT NULL,
     response_time_ms BIGINT NOT NULL,
@@ -32,4 +32,4 @@ VALUES
     ('client-a', 'Client A - Banking Service', 100, 60, NOW(), NOW()),
     ('client-b', 'Client B - Logistics Provider', 5000, 60, NOW(), NOW()),
     ('client-c', 'Client C - AI Model Service', 1000, 60, NOW(), NOW())
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO NOTHING; 
