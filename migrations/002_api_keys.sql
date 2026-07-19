@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
 
 -- Create index on client id
-CREATE INDEX IF NOT EXISTS idx_api_keys_client_id ON api_keys(client_id)
+CREATE INDEX IF NOT EXISTS idx_api_keys_client_id ON api_keys(client_id);
 
-ON CONFLICT (id) DO NOTHING;
+-- Add foreign key constraint
+ALTER TABLE api_keys 
+ADD CONSTRAINT fk_api_keys_client 
+FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE;

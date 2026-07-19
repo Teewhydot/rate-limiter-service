@@ -45,15 +45,14 @@ func (p *PostgresClient) Close() error {
 
 func (p *PostgresClient) StoreAPIKey(keyhash, client_id, name string, is_active bool, created_at, last_used_at time.Time) error {
 	query := `
-	  INSERT INTO api_key (id, name, keyhash, is_active, created_at, last_used_at)
-	  VALUES ($1, $2, $3 )
+	  INSERT INTO api_keys (key_hash, client_id, name, is_active, created_at, last_used_at)
+	  VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	_, err := p.db.Exec(query, client_id, name, keyhash, is_active, created_at, last_used_at)
+	_, err := p.db.Exec(query, keyhash, client_id, name, is_active, created_at, last_used_at)
 	if err != nil {
 		return fmt.Errorf("failed to store client api key: %w", err)
 	}
 	return nil
-
 }
 
 // GetClientIDByAPIKey looks up client_id from API key hash
@@ -89,8 +88,11 @@ func (p *PostgresClient) updateKeyLastUsed(keyHash string) {
 }
 
 func (p *PostgresClient) RevokeAPIKey(clientID string) error {
-	query := `UPDATE api_keys SET is_active = false WHERE id = $1`
-	p.db.Exec(query, clientID)
+	query := `UPDATE api_keys SET is_active = false WHERE client_id = $1`
+	_, err := p.db.Exec(query, clientID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke API key: %w", err)
+	}
 	return nil
 }
 

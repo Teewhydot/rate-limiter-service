@@ -25,10 +25,10 @@ func SetupRoutes(handler *Handler, zapLogger *zap.Logger, asyncLogger *logger.As
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
-		// Rate limit checking
+		// Rate limit checking (unprotected - called by your API gateway)
 		v1.POST("/ratelimit/check", handler.CheckRateLimit)
 
-		// Client management
+		// Client management (admin - no auth for demo/challenge)
 		clients := v1.Group("/clients")
 		{
 			clients.POST("", handler.CreateClient)
@@ -38,15 +38,15 @@ func SetupRoutes(handler *Handler, zapLogger *zap.Logger, asyncLogger *logger.As
 			clients.POST("/:id/apikey/revoke", handler.RevokeAPIKey)
 		}
 
-		// Real-time stats
+		// Real-time stats (unprotected for demo)
 		v1.GET("/stats/:client_id", handler.GetCurrentStats)
 
-		// Dashboard endpoints (for Flutter app)
-		router.Use(APIKeyAuthMiddleware(handler.postgres))
-		dashboard := v1.Group("/dashboard")
+		// Dashboard endpoints (protected - client sees only their data)
+		protected := v1.Group("/dashboard")
+		protected.Use(APIKeyAuthMiddleware(handler.postgres))
 		{
-			dashboard.GET("/usage/:client_id", handler.GetUsageStats)
-			dashboard.GET("/trends/:client_id", handler.GetTrendData)
+			protected.GET("/usage/:client_id", handler.GetUsageStats)
+			protected.GET("/trends/:client_id", handler.GetTrendData)
 		}
 	}
 
