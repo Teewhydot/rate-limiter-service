@@ -1,0 +1,184 @@
+{
+	"info": {
+		"name": "Rate Limiter Service API",
+		"description": "Complete API collection for Rate Limiter Service",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/health",
+					"host": ["{{baseUrl}}"],
+					"path": ["health"]
+				}
+			}
+		},
+		{
+			"name": "Rate Limit Check",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"client_id\": \"client-a\",\n  \"resource\": \"/api/endpoint\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/ratelimit/check",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "ratelimit", "check"]
+				}
+			}
+		},
+		{
+			"name": "Create Client",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"my-new-app\",\n  \"name\": \"My Application\",\n  \"limit\": 1000,\n  \"window_sec\": 60\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/clients",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "clients"]
+				}
+			}
+		},
+		{
+			"name": "List All Clients",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/clients",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "clients"]
+				}
+			}
+		},
+		{
+			"name": "Get Single Client",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/clients/client-a",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "clients", "client-a"]
+				}
+			}
+		},
+		{
+			"name": "Update Client",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Updated Client Name\",\n  \"limit\": 2000,\n  \"window_sec\": 120\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/clients/client-a",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "clients", "client-a"]
+				}
+			}
+		},
+		{
+			"name": "Get Current Stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/stats/client-a",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "stats", "client-a"]
+				}
+			}
+		},
+		{
+			"name": "Get Usage Statistics",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/dashboard/usage/client-a?days=30",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "dashboard", "usage", "client-a"],
+					"query": [
+						{
+							"key": "days",
+							"value": "30"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Get Trend Data",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/dashboard/trends/client-a?days=7",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "dashboard", "trends", "client-a"],
+					"query": [
+						{
+							"key": "days",
+							"value": "7"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Load Test - Multiple Requests",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"client_id\": \"test-client\",\n  \"resource\": \"/api/load-test\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/ratelimit/check",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "v1", "ratelimit", "check"]
+				}
+			}
+		}
+	]
+}

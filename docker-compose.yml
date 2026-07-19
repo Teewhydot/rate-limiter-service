@@ -1,0 +1,136 @@
+services:
+  # PostgreSQL database for client config and request logs
+  postgres:
+    image: postgres:15-alpine
+    container_name: ratelimiter-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ratelimiter
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ratelimiter-network
+
+  # Redis for distributed rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: ratelimiter-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ratelimiter-network
+
+  # Rate Limiter Service (multiple instances for HA)
+  ratelimiter-1:
+    build: .
+    container_name: ratelimiter-service-1
+    environment:
+      SERVER_PORT: 8080
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ratelimiter
+      POSTGRES_SSLMODE: disable
+      DEFAULT_LIMIT: 100
+      DEFAULT_WINDOW_SEC: 60
+      FAILSAFE_MODE: true
+      LOG_LEVEL: info
+      ASYNC_LOG_BATCH_SIZE: 100
+      ASYNC_LOG_INTERVAL: 5
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ratelimiter-network
+    restart: unless-stopped
+
+  ratelimiter-2:
+    build: .
+    container_name: ratelimiter-service-2
+    environment:
+      SERVER_PORT: 8080
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ratelimiter
+      POSTGRES_SSLMODE: disable
+      DEFAULT_LIMIT: 100
+      DEFAULT_WINDOW_SEC: 60
+      FAILSAFE_MODE: true
+      LOG_LEVEL: info
+      ASYNC_LOG_BATCH_SIZE: 100
+      ASYNC_LOG_INTERVAL: 5
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ratelimiter-network
+    restart: unless-stopped
+
+  ratelimiter-3:
+    build: .
+    container_name: ratelimiter-service-3
+    environment:
+      SERVER_PORT: 8080
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ratelimiter
+      POSTGRES_SSLMODE: disable
+      DEFAULT_LIMIT: 100
+      DEFAULT_WINDOW_SEC: 60
+      FAILSAFE_MODE: true
+      LOG_LEVEL: info
+      ASYNC_LOG_BATCH_SIZE: 100
+      ASYNC_LOG_INTERVAL: 5
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ratelimiter-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  ratelimiter-network:
+    driver: bridge
