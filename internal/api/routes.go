@@ -41,12 +41,13 @@ func SetupRoutes(handler *Handler, zapLogger *zap.Logger, asyncLogger *logger.As
 		// Real-time stats (unprotected for demo)
 		v1.GET("/stats/:client_id", handler.GetCurrentStats)
 
-		// Dashboard endpoints (protected - client sees only their data)
-		protected := v1.Group("/dashboard")
+		// Protected endpoints
+		protected := v1.Group("")
 		protected.Use(APIKeyAuthMiddleware(handler.postgres))
 		{
-			protected.GET("/usage/:client_id", handler.GetUsageStats)
-			protected.GET("/trends/:client_id", handler.GetTrendData)
+			// Dashboard endpoints
+			protected.GET("/dashboard/usage/:client_id", handler.GetUsageStats)
+			protected.GET("/dashboard/trends/:client_id", handler.GetTrendData)
 		}
 	}
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
@@ -19,34 +20,119 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   String? _error;
   Map<String, dynamic>? _healthStatus;
+  final TextEditingController _apiKeyController = TextEditingController();
+  String? _clientId;
+  bool _isAuthenticated = false;
+
+  Timer? _pollingTimer;
+
+  @override
+  void dispose() {
+    _apiKeyController.dispose();
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_isAuthenticated && mounted) {
+        _loadData(showLoading: false);
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // Don't load data until API key is entered
   }
 
-  Future<void> _loadData() async {
+  void _setApiKey() async {
+    final apiKey = _apiKeyController.text.trim();
+    if (apiKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter an API key')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Set API key and validate it to get the client ID
+      final clientId = await context.read<ApiService>().validateApiKey(apiKey);
+      
+      if (clientId == null) {
+        throw Exception('Invalid API Key');
+      }
+
+      setState(() {
+        _clientId = clientId;
+        _isAuthenticated = true;
+        _isLoading = false;
+      });
+      
+      // Load dashboard data and start polling
+      _loadData();
+      _startPolling();
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _isAuthenticated = false;
+      });
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invalid API key: ${e.toString()}')),
+      );
+    }
+  }
+
+  void _logout() {
+    _pollingTimer?.cancel();
     setState(() {
-      _isLoading = true;
-      _error = null;
+      _apiKeyController.clear();
+      _clientId = null;
+      _isAuthenticated = false;
+      _clients = null;
+      _healthStatus = null;
     });
+  }
+
+  Future<void> _loadData({bool showLoading = true}) async {
+    if (!_isAuthenticated || _clientId == null) {
+      return;
+    }
+
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final apiService = context.read<ApiService>();
-      final clients = await apiService.getClients();
+      
+      // Get only this client's data
+      final client = await apiService.getClient(_clientId!);
       final health = await apiService.healthCheck();
 
-      setState(() {
-        _clients = clients;
-        _healthStatus = health;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _clients = [client]; // Show only logged-in client
+          _healthStatus = health;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          if (showLoading) _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -65,24 +151,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Rate Limiter Dashboard',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Rate Limiter Dashboard',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (_isAuthenticated && _clientId != null)
+              Text(
+                'Client: $_clientId',
+                style: const TextStyle(fontSize: 12),
+              ),
+          ],
         ),
         actions: [
+          if (_isAuthenticated)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: _logout,
+              tooltip: 'Logout',
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
+            onPressed: _isAuthenticated ? _loadData : null,
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateClientDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('New Client'),
+      body: !_isAuthenticated ? _buildLoginForm() : _buildBody(),
+    );
+  }
+
+  Widget _buildLoginForm() {
+    return Center(
+      child: Card(
+        margin: const EdgeInsets.all(24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.vpn_key, size: 64, color: Colors.blue),
+              const SizedBox(height: 16),
+              Text(
+                'Enter Your API Key',
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'View your rate limiting stats',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _apiKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  hintText: 'sk_live_...',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.key),
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _setApiKey,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('View Dashboard'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -139,23 +285,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.inbox_outlined,
+              Icons.person_outline,
               size: 64,
               color: Colors.grey[400],
             ),
             const SizedBox(height: 16),
             Text(
-              'No clients yet',
+              'Client: $_clientId',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            const Text('Create your first client to get started'),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _showCreateClientDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Client'),
-            ),
+            const Text('Loading your data...'),
           ],
         ),
       );
@@ -181,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Clients (${_clients!.length})',
+                    'Your Account',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),

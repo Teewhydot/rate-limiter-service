@@ -5,9 +5,42 @@ import '../models/usage_stats_model.dart';
 import '../models/rate_limit_response.dart';
 
 class ApiService {
-  final String baseUrl;
+  static const String baseUrl = 'http://localhost:8080';
+  String? _apiKey;
 
-  ApiService({required this.baseUrl});
+  void setApiKey(String apiKey) {
+    _apiKey = apiKey;
+  }
+
+  Map<String, String> _getHeaders() {
+    final headers = {
+      'Content-Type': 'application/json',
+    };
+    if (_apiKey != null) {
+      headers['X-API-Key'] = _apiKey!;
+    }
+    return headers;
+  }
+
+  // Validate API key by fetching client info via /me
+  Future<String?> validateApiKey(String apiKey) async {
+    try {
+      setApiKey(apiKey);
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/v1/clients/me'),
+        headers: _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['id'];
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 
   // Get all clients
   Future<List<Client>> getClients() async {
@@ -112,10 +145,11 @@ class ApiService {
     }
   }
 
-  // Get usage statistics
+  // Get usage statistics (PROTECTED - needs API key)
   Future<UsageStats> getUsageStats(String clientId, {int days = 30}) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/v1/dashboard/usage/$clientId?days=$days'),
+      headers: _getHeaders(),  // Add API key header
     );
 
     if (response.statusCode == 200) {
@@ -125,11 +159,12 @@ class ApiService {
     }
   }
 
-  // Get trend data
+  // Get trend data (PROTECTED - needs API key)
   Future<Map<String, dynamic>> getTrendData(String clientId,
       {int days = 7}) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/v1/dashboard/trends/$clientId?days=$days'),
+      headers: _getHeaders(),  // Add API key header
     );
 
     if (response.statusCode == 200) {

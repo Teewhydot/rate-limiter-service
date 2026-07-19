@@ -44,11 +44,12 @@ func (p *PostgresClient) Close() error {
 // Store the API key for client
 
 func (p *PostgresClient) StoreAPIKey(keyhash, client_id, name string, is_active bool, created_at, last_used_at time.Time) error {
+	id := fmt.Sprintf("ak_%d", time.Now().UnixNano())
 	query := `
-	  INSERT INTO api_keys (key_hash, client_id, name, is_active, created_at, last_used_at)
-	  VALUES ($1, $2, $3, $4, $5, $6)
+	  INSERT INTO api_keys (id, key_hash, client_id, name, is_active, created_at, last_used_at)
+	  VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
-	_, err := p.db.Exec(query, keyhash, client_id, name, is_active, created_at, last_used_at)
+	_, err := p.db.Exec(query, id, keyhash, client_id, name, is_active, created_at, last_used_at)
 	if err != nil {
 		return fmt.Errorf("failed to store client api key: %w", err)
 	}

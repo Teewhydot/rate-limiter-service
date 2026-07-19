@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -23,17 +24,30 @@ class _ClientDetailsScreenState extends State<ClientDetailsScreen> {
   String? _error;
   int _selectedDays = 7;
 
+  Timer? _pollingTimer;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) _loadData(showLoading: false);
+    });
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadData({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final apiService = context.read<ApiService>();
@@ -43,16 +57,20 @@ class _ClientDetailsScreenState extends State<ClientDetailsScreen> {
       );
       final current = await apiService.getCurrentStats(widget.client.id);
 
-      setState(() {
-        _usageStats = stats;
-        _currentStats = current;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _usageStats = stats;
+          _currentStats = current;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          if (showLoading) _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -100,7 +100,9 @@ func TestConcurrentMultipleClients(t *testing.T) {
 		clientID := "test-client-multi-" + string(rune('A'+clientIdx))
 		redis.ResetClient(clientID)
 
+		resultsMu.Lock()
 		results[clientID] = &clientResult{}
+		resultsMu.Unlock()
 
 		for reqIdx := 0; reqIdx < requestsPerClient; reqIdx++ {
 			wg.Add(1)

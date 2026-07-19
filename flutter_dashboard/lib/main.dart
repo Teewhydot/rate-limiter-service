@@ -15,12 +15,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<ApiService>(
-          create: (_) => ApiService(
-            baseUrl: const String.fromEnvironment(
-              'API_URL',
-              defaultValue: 'http://localhost:8080',
-            ),
-          ),
+          create: (_) => ApiService(),
         ),
       ],
       child: MaterialApp(

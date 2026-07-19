@@ -9,6 +9,7 @@ import (
 	"github.com/tundesmac/rate-limiter-service/internal/models"
 	"github.com/tundesmac/rate-limiter-service/internal/ratelimiter"
 	"github.com/tundesmac/rate-limiter-service/internal/storage"
+	"github.com/tundesmac/rate-limiter-service/internal/auth"
 	"go.uber.org/zap"
 )
 
@@ -128,6 +129,27 @@ func (h *Handler) CreateClient(c *gin.Context) {
 // GET /api/v1/clients/:id
 func (h *Handler) GetClient(c *gin.Context) {
 	clientID := c.Param("id")
+
+	if clientID == "me" {
+		apiKey := c.GetHeader("X-API-Key")
+		if apiKey == "" {
+			apiKey = c.GetHeader("Authorization")
+			if len(apiKey) > 7 && apiKey[:7] == "Bearer " {
+				apiKey = apiKey[7:]
+			}
+		}
+		if apiKey == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key required for /me"})
+			return
+		}
+		keyHash := auth.HashAPIKey(apiKey)
+		authClientID, err := h.postgres.GetClientIDByAPIKey(keyHash)
+		if err != nil || authClientID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+			return
+		}
+		clientID = authClientID
+	}
 
 	client, err := h.postgres.GetClient(clientID)
 	if err != nil {
