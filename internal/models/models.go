@@ -18,6 +18,10 @@ type RateLimitRequest struct {
 	Resource  string `json:"resource"`  // Optional: specific API endpoint
 }
 
+type RevokeAPIKeyRequest struct {
+	ClientID  string `json:"client_id" binding:"required"`
+}
+
 // RateLimitResponse represents the response to a rate limit check
 type RateLimitResponse struct {
 	Allowed       bool   `json:"allowed"`

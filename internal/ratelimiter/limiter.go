@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/tundesmac/rate-limiter-service/internal/config"
 	"github.com/tundesmac/rate-limiter-service/internal/logger"
 	"github.com/tundesmac/rate-limiter-service/internal/models"
 	"github.com/tundesmac/rate-limiter-service/internal/storage"
+	"go.uber.org/zap"
 )
 
 // RateLimiter handles rate limiting logic
@@ -53,7 +53,7 @@ func (rl *RateLimiter) CheckLimit(req models.RateLimitRequest) (*models.RateLimi
 			WindowSec: rl.config.DefaultWindowSec,
 		}
 	}
-	
+
 	// If client not found, use defaults
 	if client == nil {
 		client = &models.Client{
@@ -62,21 +62,21 @@ func (rl *RateLimiter) CheckLimit(req models.RateLimitRequest) (*models.RateLimi
 			WindowSec: rl.config.DefaultWindowSec,
 		}
 	}
-	
+
 	// Check rate limit in Redis
 	allowed, remaining, resetAt, err := rl.redis.CheckRateLimit(
 		req.ClientID,
 		client.Limit,
 		client.WindowSec,
 	)
-	
+
 	// Handle Redis failure with fail-safe strategy
 	if err != nil {
 		rl.logger.Error("Redis rate limit check failed",
 			zap.String("client_id", req.ClientID),
 			zap.Error(err),
 		)
-		
+
 		if rl.config.FailSafeMode {
 			// Allow request when Redis is down (fail-open)
 			rl.logger.Warn("Fail-safe mode: allowing request due to Redis error",
@@ -92,7 +92,7 @@ func (rl *RateLimiter) CheckLimit(req models.RateLimitRequest) (*models.RateLimi
 			resetAt = time.Now().Add(time.Duration(client.WindowSec) * time.Second).Unix()
 		}
 	}
-	
+
 	// Build response
 	response := &models.RateLimitResponse{
 		Allowed:   allowed,
@@ -100,7 +100,7 @@ func (rl *RateLimiter) CheckLimit(req models.RateLimitRequest) (*models.RateLimi
 		Limit:     client.Limit,
 		ResetAt:   resetAt,
 	}
-	
+
 	// Add retry-after if not allowed
 	if !allowed {
 		retryAfter := int(time.Until(time.Unix(resetAt, 0)).Seconds())
@@ -109,7 +109,7 @@ func (rl *RateLimiter) CheckLimit(req models.RateLimitRequest) (*models.RateLimi
 		}
 		response.RetryAfter = retryAfter
 	}
-	
+
 	return response, nil
 }
 
@@ -119,11 +119,11 @@ func (rl *RateLimiter) GetClientStats(clientID string) (map[string]interface{}, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client: %w", err)
 	}
-	
+
 	if client == nil {
 		return nil, fmt.Errorf("client not found: %s", clientID)
 	}
-	
+
 	// Get current count from Redis
 	currentCount, err := rl.redis.GetCurrentCount(clientID, client.WindowSec)
 	if err != nil {
@@ -133,12 +133,12 @@ func (rl *RateLimiter) GetClientStats(clientID string) (map[string]interface{}, 
 		)
 		currentCount = 0
 	}
-	
+
 	remaining := client.Limit - int(currentCount)
 	if remaining < 0 {
 		remaining = 0
 	}
-	
+
 	return map[string]interface{}{
 		"client_id":    clientID,
 		"limit":        client.Limit,

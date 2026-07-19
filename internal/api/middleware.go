@@ -7,6 +7,11 @@ import (
 	"go.uber.org/zap"
 	"github.com/tundesmac/rate-limiter-service/internal/logger"
 	"github.com/tundesmac/rate-limiter-service/internal/models"
+	"net/http"
+	
+	"github.com/tundesmac/rate-limiter-service/internal/auth"
+	"github.com/tundesmac/rate-limiter-service/internal/storage"
+
 )
 
 // LoggerMiddleware logs all incoming requests
@@ -66,6 +71,52 @@ func CORSMiddleware() gin.HandlerFunc {
 			return
 		}
 		
+		c.Next()
+	}
+}
+
+
+// APIKeyAuthMiddleware validates API key and extracts client_id
+func APIKeyAuthMiddleware(postgres *storage.PostgresClient) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 1. Extract API key from header
+		apiKey := c.GetHeader("X-API-Key")
+		if apiKey == "" {
+			// Try Authorization header: "Bearer <key>"
+			apiKey = c.GetHeader("Authorization")
+			if len(apiKey) > 7 && apiKey[:7] == "Bearer " {
+				apiKey = apiKey[7:] // Remove "Bearer " prefix
+			}
+		}
+		
+		// 2. Validate key exists
+		if apiKey == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "API key required",
+				"code":  "missing_api_key",
+			})
+			c.Abort()
+			return
+		}
+		
+		// 3. Hash the incoming API key
+		keyHash := auth.HashAPIKey(apiKey)
+		
+		// 4. Look up client_id in database using the hash
+		clientID, err := postgres.GetClientIDByAPIKey(keyHash)
+		if err != nil || clientID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid or revoked API key",
+				"code":  "invalid_api_key",
+			})
+			c.Abort()
+			return
+		}
+		
+		// 5. Store client_id in context for handlers to use
+		c.Set("client_id", clientID)
+		
+		// 6. Continue to next handler
 		c.Next()
 	}
 }

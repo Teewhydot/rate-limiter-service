@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/tundesmac/rate-limiter-service/internal/models"
 	"github.com/tundesmac/rate-limiter-service/internal/storage"
+	"go.uber.org/zap"
 )
 
 // AsyncLogger handles asynchronous logging of requests to avoid blocking rate limit checks
@@ -30,11 +30,11 @@ func NewAsyncLogger(postgres *storage.PostgresClient, batchSize int, flushInterv
 		logger:        logger,
 		shutdown:      make(chan struct{}),
 	}
-	
+
 	// Start the background worker
 	al.wg.Add(1)
 	go al.worker()
-	
+
 	return al
 }
 
@@ -54,17 +54,17 @@ func (al *AsyncLogger) Log(log models.RequestLog) {
 // worker is the background goroutine that processes logs in batches
 func (al *AsyncLogger) worker() {
 	defer al.wg.Done()
-	
+
 	ticker := time.NewTicker(al.flushInterval)
 	defer ticker.Stop()
-	
+
 	batch := make([]models.RequestLog, 0, al.batchSize)
-	
+
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
-		
+
 		// Write batch to database
 		if err := al.postgres.LogRequestBatch(batch); err != nil {
 			al.logger.Error("Failed to write log batch",
@@ -76,25 +76,25 @@ func (al *AsyncLogger) worker() {
 				zap.Int("batch_size", len(batch)),
 			)
 		}
-		
+
 		// Clear batch
 		batch = batch[:0]
 	}
-	
+
 	for {
 		select {
 		case log := <-al.logChan:
 			batch = append(batch, log)
-			
+
 			// Flush if batch is full
 			if len(batch) >= al.batchSize {
 				flush()
 			}
-			
+
 		case <-ticker.C:
 			// Periodic flush
 			flush()
-			
+
 		case <-al.shutdown:
 			// Drain remaining logs
 			for {

@@ -13,20 +13,20 @@ This guide provides pointers for implementing API key authentication so that `cl
 Create a new migration file to store API keys:
 
 **Table: `api_keys`**
-- [x ] `id` - BIGSERIAL PRIMARY KEY
-- [ x] `key_hash` - VARCHAR(255) UNIQUE NOT NULL (hashed version of key)
-- [x ] `client_id` - VARCHAR(255) NOT NULL (foreign key to clients table)
-- [x ] `name` - VARCHAR(255) NOT NULL (descriptive name like "Production Key")
-- [x ] `created_at` - TIMESTAMP NOT NULL DEFAULT NOW()
-- [ x] `last_used_at` - TIMESTAMP (track usage)
-- [x ] `is_active` - BOOLEAN NOT NULL DEFAULT true (for revocation)
-- [ x] `expires_at` - TIMESTAMP (optional: for key expiration)
+- [x] `id` - BIGSERIAL PRIMARY KEY
+- [x] `key_hash` - VARCHAR(255) UNIQUE NOT NULL (hashed version of key)
+- [x] `client_id` - VARCHAR(255) NOT NULL (foreign key to clients table)
+- [x] `name` - VARCHAR(255) NOT NULL (descriptive name like "Production Key")
+- [x] `created_at` - TIMESTAMP NOT NULL DEFAULT NOW()
+- [x] `last_used_at` - TIMESTAMP (track usage)
+- [x] `is_active` - BOOLEAN NOT NULL DEFAULT true (for revocation)
+- [x] `expires_at` - TIMESTAMP (optional: for key expiration)
 
 **Indexes:**
-- [ x] Primary key on `id`
-- [ x] Unique index on `key_hash`
-- [x ] Index on `client_id` for fast lookups
-- [ x] Foreign key constraint: `client_id` REFERENCES `clients(id)` ON DELETE CASCADE
+- [x] Primary key on `id`
+- [x] Unique index on `key_hash`
+- [x] Index on `client_id` for fast lookups
+- [x] Foreign key constraint: `client_id` REFERENCES `clients(id)` ON DELETE CASCADE
 
 ---
 
@@ -35,10 +35,10 @@ Create a new migration file to store API keys:
 **Function: `GenerateAPIKey(clientID string) (string, error)`**
 
 Steps:
-- [ ] Generate 32 random bytes using `crypto/rand.Read()`
-- [ ] Encode to base64 or hex string
-- [ ] Add prefix: `sk_live_` for production or `sk_test_` for testing
-- [ ] Return format: `sk_live_a1b2c3d4e5f6...` (total ~50-60 chars)
+- [x] Generate 32 random bytes using `crypto/rand.Read()`
+- [x] Encode to base64 or hex string
+- [x] Add prefix: `sk_live_` for production or `sk_test_` for testing
+- [x] Return format: `sk_live_a1b2c3d4e5f6...` (total ~50-60 chars)
 
 Example format:
 ```
@@ -68,9 +68,9 @@ Why hash?
 - Similar to password hashing
 
 Steps:
-- [ ] Use `crypto/sha256` to hash the API key
-- [ ] Convert hash to hex string using `hex.EncodeToString()`
-- [ ] Return the hash (this goes in the database)
+- [x] Use `crypto/sha256` to hash the API key
+- [x] Convert hash to hex string using `hex.EncodeToString()`
+- [x] Return the hash (this goes in the database)
 
 **Go packages needed:**
 ```go
@@ -90,25 +90,21 @@ import (
 ### 4. PostgreSQL Methods (`internal/storage/postgres.go`)
 
 **Method 1: `StoreAPIKey(keyHash, clientID, name string) error`**
-- [ ] INSERT into `api_keys` table
-- [ ] Parameters: key_hash, client_id, name, created_at, is_active
-- [ ] Use parameterized query to prevent SQL injection
-- [ ] Return error if duplicate key_hash
+- [x] INSERT into `api_keys` table
+- [x] Parameters: key_hash, client_id, name, created_at, is_active
+- [x] Use parameterized query to prevent SQL injection
+- [x] Return error if duplicate key_hash
 
 **Method 2: `GetClientIDByAPIKey(keyHash string) (string, error)`**
-- [ ] SELECT client_id from `api_keys` WHERE key_hash = $1 AND is_active = true
-- [ ] Return client_id if found
-- [ ] Return error if not found or inactive
-- [ ] Optional: UPDATE last_used_at (can be done async for performance)
+- [x] SELECT client_id from `api_keys` WHERE key_hash = $1 AND is_active = true
+- [x] Return client_id if found
+- [x] Return error if not found or inactive
+- [x] Optional: UPDATE last_used_at (can be done async for performance)
 
 **Method 3: `RevokeAPIKey(keyHash string) error`**
-- [ ] UPDATE api_keys SET is_active = false WHERE key_hash = $1
-- [ ] Used to disable compromised keys without deleting
+- [x] UPDATE api_keys SET is_active = false WHERE key_hash = $1
+- [x] Used to disable compromised keys without deleting
 
-**Method 4: `ListAPIKeysForClient(clientID string) ([]APIKey, error)`**
-- [ ] SELECT * from api_keys WHERE client_id = $1
-- [ ] Return list of keys (without revealing actual keys)
-- [ ] Show: name, created_at, last_used_at, is_active
 
 ---
 
@@ -117,16 +113,16 @@ import (
 **Function: `APIKeyAuthMiddleware(postgres *storage.PostgresClient) gin.HandlerFunc`**
 
 Steps in the middleware:
-- [ ] Extract API key from request header
+- [x] Extract API key from request header
   - Check `X-API-Key` header, OR
   - Check `Authorization: Bearer <key>` header
-- [ ] Validate key is not empty
-- [ ] Hash the incoming API key using `HashAPIKey()`
-- [ ] Call `postgres.GetClientIDByAPIKey(keyHash)`
-- [ ] If valid:
+- [x] Validate key is not empty
+- [x] Hash the incoming API key using `HashAPIKey()`
+- [x] Call `postgres.GetClientIDByAPIKey(keyHash)`
+- [x] If valid:
   - Store client_id in context: `c.Set("client_id", clientID)`
   - Call `c.Next()` to continue to handler
-- [ ] If invalid:
+- [x] If invalid:
   - Return 401 Unauthorized
   - Call `c.Abort()`
   - Don't continue to handler
@@ -153,13 +149,13 @@ POST /admin/clients/:client_id/api-keys
 ```
 
 Steps:
-- [ ] Get client_id from URL params: `c.Param("client_id")`
-- [ ] Verify client exists in database
-- [ ] Parse request body to get `name`
-- [ ] Generate raw API key using `GenerateAPIKey()`
-- [ ] Hash the key using `HashAPIKey()`
-- [ ] Store hash in database: `postgres.StoreAPIKey(hash, clientID, name)`
-- [ ] Return raw key to user (ONLY TIME they see it!)
+- [x] Get client_id from URL params: `c.Param("client_id")`
+- [x] Verify client exists in database
+- [x] Parse request body to get `name`
+- [x] Generate raw API key using `GenerateAPIKey()`
+- [x] Hash the key using `HashAPIKey()`
+- [x] Store hash in database: `postgres.StoreAPIKey(hash, clientID, name)`
+- [x] Return raw key to user (ONLY TIME they see it!)
 
 Response:
 ```json

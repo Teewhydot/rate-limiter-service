@@ -6,6 +6,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/tundesmac/rate-limiter-service/internal/auth"
 	"github.com/tundesmac/rate-limiter-service/internal/config"
 	"github.com/tundesmac/rate-limiter-service/internal/models"
 )
@@ -21,23 +22,76 @@ func NewPostgresClient(cfg *config.Config) (*PostgresClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	
+
 	// Configure connection pool
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
-	
+
 	// Test connection
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
-	
+
 	return &PostgresClient{db: db}, nil
 }
 
 // Close closes the database connection
 func (p *PostgresClient) Close() error {
 	return p.db.Close()
+}
+
+// Store the API key for client
+
+func (p *PostgresClient) StoreAPIKey(keyhash, client_id, name string, is_active bool, created_at, last_used_at time.Time) error {
+	query := `
+	  INSERT INTO api_key (id, name, keyhash, is_active, created_at, last_used_at)
+	  VALUES ($1, $2, $3 )
+	`
+	_, err := p.db.Exec(query, client_id, name, keyhash, is_active, created_at, last_used_at)
+	if err != nil {
+		return fmt.Errorf("failed to store client api key: %w", err)
+	}
+	return nil
+
+}
+
+// GetClientIDByAPIKey looks up client_id from API key hash
+func (p *PostgresClient) GetClientIDByAPIKey(keyHash string) (string, error) {
+	query := `
+		SELECT client_id 
+		FROM api_keys 
+		WHERE key_hash = $1 
+		  AND is_active = true
+	`
+
+	var clientID string
+	err := p.db.QueryRow(query, keyHash).Scan(&clientID)
+
+	if err == sql.ErrNoRows {
+		return "", nil // Key not found
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup API key: %w", err)
+	}
+
+	// Optional: Update last_used_at (can do this async for performance)
+	go p.updateKeyLastUsed(keyHash)
+
+	return clientID, nil
+}
+
+// updateKeyLastUsed updates the last_used_at timestamp (async)
+func (p *PostgresClient) updateKeyLastUsed(keyHash string) {
+	query := `UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1`
+	p.db.Exec(query, keyHash)
+}
+
+func (p *PostgresClient) RevokeAPIKey(clientID string) error {
+	query := `UPDATE api_keys SET is_active = false WHERE id = $1`
+	p.db.Exec(query, clientID)
+	return nil
 }
 
 // GetClient retrieves a client by ID
@@ -47,7 +101,7 @@ func (p *PostgresClient) GetClient(clientID string) (*models.Client, error) {
 		FROM clients
 		WHERE id = $1
 	`
-	
+
 	var client models.Client
 	err := p.db.QueryRow(query, clientID).Scan(
 		&client.ID,
@@ -57,25 +111,25 @@ func (p *PostgresClient) GetClient(clientID string) (*models.Client, error) {
 		&client.CreatedAt,
 		&client.UpdatedAt,
 	)
-	
+
 	if err == sql.ErrNoRows {
 		return nil, nil // Client not found
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client: %w", err)
 	}
-	
+
 	return &client, nil
 }
 
 // CreateClient creates a new client
-func (p *PostgresClient) CreateClient(client *models.Client) error {
+func (p *PostgresClient) CreateClient(client *models.Client) (string, error) {
 	query := `
 		INSERT INTO clients (id, name, rate_limit, window_sec, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	
+	//Create the user in the users database
 	now := time.Now()
 	_, err := p.db.Exec(query,
 		client.ID,
@@ -85,12 +139,27 @@ func (p *PostgresClient) CreateClient(client *models.Client) error {
 		now,
 		now,
 	)
-	
+
 	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
+		return "", fmt.Errorf("failed to create client: %w", err)
 	}
-	
-	return nil
+
+	// Generate API key for the client
+	clientAPIKey, err := auth.GenerateClientAPIKey()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate API key: %w", err)
+	}
+
+	// Hash the API key
+	keyHash := auth.HashAPIKey(clientAPIKey)
+
+	// Store the hash in api_keys table
+	storeErr := p.StoreAPIKey(keyHash, client.ID, "Default Key", true, now, now)
+	if storeErr != nil {
+		return "", fmt.Errorf("failed to store API key: %w", storeErr)
+	}
+
+	return clientAPIKey, nil
 }
 
 // UpdateClient updates an existing client
@@ -100,7 +169,7 @@ func (p *PostgresClient) UpdateClient(client *models.Client) error {
 		SET name = $2, rate_limit = $3, window_sec = $4, updated_at = $5
 		WHERE id = $1
 	`
-	
+
 	_, err := p.db.Exec(query,
 		client.ID,
 		client.Name,
@@ -108,11 +177,11 @@ func (p *PostgresClient) UpdateClient(client *models.Client) error {
 		client.WindowSec,
 		time.Now(),
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to update client: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -123,13 +192,14 @@ func (p *PostgresClient) ListClients() ([]models.Client, error) {
 		FROM clients
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := p.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list clients: %w", err)
 	}
+
 	defer rows.Close()
-	
+
 	var clients []models.Client
 	for rows.Next() {
 		var client models.Client
@@ -146,7 +216,7 @@ func (p *PostgresClient) ListClients() ([]models.Client, error) {
 		}
 		clients = append(clients, client)
 	}
-	
+
 	return clients, nil
 }
 
@@ -156,7 +226,7 @@ func (p *PostgresClient) LogRequest(log *models.RequestLog) error {
 		INSERT INTO request_logs (client_id, resource, allowed, response_time_ms, timestamp)
 		VALUES ($1, $2, $3, $4, $5)
 	`
-	
+
 	_, err := p.db.Exec(query,
 		log.ClientID,
 		log.Resource,
@@ -164,11 +234,11 @@ func (p *PostgresClient) LogRequest(log *models.RequestLog) error {
 		log.ResponseTime,
 		log.Timestamp,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to log request: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -177,13 +247,13 @@ func (p *PostgresClient) LogRequestBatch(logs []models.RequestLog) error {
 	if len(logs) == 0 {
 		return nil
 	}
-	
+
 	tx, err := p.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	stmt, err := tx.Prepare(`
 		INSERT INTO request_logs (client_id, resource, allowed, response_time_ms, timestamp)
 		VALUES ($1, $2, $3, $4, $5)
@@ -192,7 +262,7 @@ func (p *PostgresClient) LogRequestBatch(logs []models.RequestLog) error {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
-	
+
 	for _, log := range logs {
 		_, err := stmt.Exec(
 			log.ClientID,
@@ -205,11 +275,11 @@ func (p *PostgresClient) LogRequestBatch(logs []models.RequestLog) error {
 			return fmt.Errorf("failed to execute statement: %w", err)
 		}
 	}
-	
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -226,7 +296,7 @@ func (p *PostgresClient) GetUsageStats(clientID string, startDate, endDate time.
 		WHERE client_id = $1 AND timestamp BETWEEN $2 AND $3
 		GROUP BY client_id
 	`
-	
+
 	var stats models.UsageStats
 	err := p.db.QueryRow(query, clientID, startDate, endDate).Scan(
 		&stats.ClientID,
@@ -235,7 +305,7 @@ func (p *PostgresClient) GetUsageStats(clientID string, startDate, endDate time.
 		&stats.BlockedRequests,
 		&stats.AvgResponseTime,
 	)
-	
+
 	if err == sql.ErrNoRows {
 		// No data for this period, return zero stats
 		return &models.UsageStats{
@@ -244,14 +314,14 @@ func (p *PostgresClient) GetUsageStats(clientID string, startDate, endDate time.
 			PeriodEnd:   endDate,
 		}, nil
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get usage stats: %w", err)
 	}
-	
+
 	stats.PeriodStart = startDate
 	stats.PeriodEnd = endDate
-	
+
 	return &stats, nil
 }
 
@@ -269,13 +339,13 @@ func (p *PostgresClient) GetTrendData(clientID string, startDate, endDate time.T
 		GROUP BY time_bucket
 		ORDER BY time_bucket
 	`
-	
+
 	rows, err := p.db.Query(query, clientID, startDate, endDate, intervalHours)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get trend data: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var trends []models.TrendData
 	for rows.Next() {
 		var trend models.TrendData
@@ -290,7 +360,7 @@ func (p *PostgresClient) GetTrendData(clientID string, startDate, endDate time.T
 		}
 		trends = append(trends, trend)
 	}
-	
+
 	return trends, nil
 }
 
