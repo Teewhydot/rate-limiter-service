@@ -5,7 +5,6 @@ import '../services/api_service.dart';
 import '../models/client_model.dart';
 import 'client_details_screen.dart';
 import '../widgets/client_card.dart';
-import '../widgets/create_client_dialog.dart';
 import '../widgets/system_health_card.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -134,17 +133,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     }
-  }
-
-  void _showCreateClientDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => CreateClientDialog(
-        onClientCreated: () {
-          _loadData();
-        },
-      ),
-    );
   }
 
   @override
